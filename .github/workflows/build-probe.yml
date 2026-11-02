@@ -49,7 +49,6 @@ jobs:
 
       - name: Build bb-probe
         run: |
-          export MSYS2_ROOT=$(cygpath -u "$RUNNER_TEMP/../../_temp/msys64" 2>/dev/null || echo /c/msys64)
           bash build.sh
 
       - name: List DLL dependencies
