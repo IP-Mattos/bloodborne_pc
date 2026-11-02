@@ -15,6 +15,7 @@
 #include "core/libraries/np/np_handler/np_handler.h"
 #include "core/libraries/np/np_utility/np_utility.h"
 #include "core/libraries/np/np_utility/np_utility_ctx.h"
+#include "core/net/bbsc_relay.h"
 
 namespace Libraries::Np::NpUtility {
 
@@ -208,9 +209,16 @@ s32 PS4_SYSV_ABI sceNpLookupNpId(OrbisNpLookupRequestId reqId, const OrbisNpOnli
     const std::string targetOnlineId(OnlineIdView(*onlineId));
     Libraries::Np::NpHandler::GetInstance().ResolveOnlineId(
         searching_user_id, targetOnlineId,
-        [req, npId](s32 result, u64 /*accountId*/, const std::string& canonicalOnlineId) {
+        [req, npId, targetOnlineId](s32 result, u64 /*accountId*/,
+                                    const std::string& canonicalOnlineId) {
             if (result == ORBIS_OK && npId != nullptr) {
                 SetNpId(*npId, canonicalOnlineId);
+            } else if (npId != nullptr && Core::Net::BbscRelay::Enabled()) {
+                // bbport: BBSC's game server has no online id lookup. On shadNet an NpId is the
+                // online id in its handle, so a joiner can still activate the other players in
+                // the room (BBSC's sceNpLookupNpId, bbport-1.7.2-bbsc.patch).
+                SetNpId(*npId, targetOnlineId);
+                result = ORBIS_OK;
             }
             req->SetResult(result);
         });

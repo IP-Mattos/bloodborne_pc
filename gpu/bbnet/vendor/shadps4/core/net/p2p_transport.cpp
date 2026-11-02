@@ -5,6 +5,7 @@
 #include <cstring>
 #include <tuple>
 
+#include "core/net/bbsc_relay.h"
 #include "core/net/p2p_transport.h"
 
 #ifndef _WIN32
@@ -211,6 +212,12 @@ void Transport::ThreadMain() {
         {
             std::scoped_lock lock{mutex_};
             deadline = EarliestDeadline();
+            if (BbscRelay::Active()) { // registrations every few seconds
+                const auto wake = Clock::now() + std::chrono::seconds(1);
+                if (!deadline || wake < *deadline) {
+                    deadline = wake;
+                }
+            }
             sleeping_until_ = deadline.value_or(Clock::time_point::max());
         }
         const auto result = Host::WaitOne(socket_, Host::Readable, kick_, deadline);
@@ -236,6 +243,22 @@ void Transport::ThreadMain() {
                          Endpoint::FromSockaddr(reinterpret_cast<sockaddr*>(&from), from_len), now);
         }
         RunTimers(now);
+        SendBbscRelayKeepAlive();
+    }
+}
+
+void Transport::SendBbscRelayKeepAlive() {
+    const auto frames = BbscRelay::KeepAlive();
+    if (frames.empty()) {
+        return;
+    }
+    sockaddr_in server{};
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = BbscRelay::ServerAddr();
+    server.sin_port = BbscRelay::ServerPort();
+    for (const auto& frame : frames) {
+        Host::SendTo(socket_, frame.data(), frame.size(), 0,
+                     reinterpret_cast<const sockaddr*>(&server), sizeof(server));
     }
 }
 
@@ -284,6 +307,25 @@ Error Transport::SendPacket(std::span<const u8> packet, const Endpoint& to) {
         if (static_cast<double>(loss_rng_ >> 11) / static_cast<double>(1ull << 53) <
             loss_for_testing_) {
             return Error::Ok;
+        }
+    }
+    if (to.Family() == AF_INET && BbscRelay::Active()) {
+        // bbport: BBSC's relay (instead of the SuperMedo one): a copy through the server for
+        // every known peer, and the direct packet too until the peer answers directly.
+        const auto* in = reinterpret_cast<const sockaddr_in*>(to.Sockaddr());
+        const auto route =
+            BbscRelay::Route(in->sin_addr.s_addr, in->sin_port, packet.data(), packet.size());
+        if (!route.relay_frame.empty()) {
+            sockaddr_in server{};
+            server.sin_family = AF_INET;
+            server.sin_addr.s_addr = BbscRelay::ServerAddr();
+            server.sin_port = BbscRelay::ServerPort();
+            const auto relayed =
+                Host::SendTo(socket_, route.relay_frame.data(), route.relay_frame.size(), 0,
+                             reinterpret_cast<const sockaddr*>(&server), sizeof(server));
+            if (!route.send_direct) {
+                return relayed.error;
+            }
         }
     }
     if (relay_server_ && to.Family() == AF_INET) {
@@ -337,6 +379,32 @@ u16 Transport::AllocateVport(bool stream) {
 
 void Transport::HandlePacket(std::span<const u8> packet, const Endpoint& from,
                              Clock::time_point now) {
+    if (from.Family() == AF_INET && BbscRelay::Active()) {
+        const auto* in = reinterpret_cast<const sockaddr_in*>(from.Sockaddr());
+        if (in->sin_addr.s_addr == BbscRelay::ServerAddr() &&
+            in->sin_port == BbscRelay::ServerPort()) {
+            bool deliver = false;
+            u32 peer_addr = 0;
+            u16 peer_port = 0;
+            size_t offset = 0;
+            if (BbscRelay::Receive(packet.data(), packet.size(), &deliver, &peer_addr, &peer_port,
+                                   &offset)) {
+                if (deliver) {
+                    sockaddr_in source{};
+                    source.sin_family = AF_INET;
+                    source.sin_addr.s_addr = peer_addr;
+                    source.sin_port = peer_port;
+                    HandlePacket(packet.subspan(offset),
+                                 Endpoint::FromSockaddr(reinterpret_cast<const sockaddr*>(&source),
+                                                        sizeof(source)),
+                                 now);
+                }
+                return;
+            }
+        } else {
+            BbscRelay::NoteDirectReceive(in->sin_addr.s_addr, in->sin_port);
+        }
+    }
     if (relay_server_ && from == *relay_server_ && packet.size() > kRelayHeaderSize &&
         std::memcmp(packet.data(), kRelayMagic, 4) == 0 && packet[4] == kRelayDeliver) {
         sockaddr_in source{};

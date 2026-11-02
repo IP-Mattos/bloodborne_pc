@@ -24,6 +24,7 @@
 #include "core/libraries/np/np_matching2/np_matching2_signaling.h"
 #include "core/libraries/np/np_signaling/np_signaling_state.h"
 #include "core/libraries/np/np_signaling/np_signaling_transport.h"
+#include "core/net/bbsc_relay.h"
 
 namespace Libraries::Np::SignalingHandler {
 namespace {
@@ -73,9 +74,14 @@ bool ResolvePeerEndpoint(const NpMatching2::MemberCache& member, u32* out_addr, 
     }
 
     const std::string online_id = OnlineIdString(member.np_id.handle);
-    return !online_id.empty() &&
-           NpSignaling::Transport::ResolvePeer(online_id, out_addr, out_port) && *out_addr != 0 &&
-           *out_port != 0;
+    const bool resolved = !online_id.empty() &&
+                          NpSignaling::Transport::ResolvePeer(online_id, out_addr, out_port) &&
+                          *out_addr != 0 && *out_port != 0;
+    if (resolved && Core::Net::BbscRelay::Enabled()) {
+        // bbport: the BBSC relay addresses peers by online id.
+        Core::Net::BbscRelay::RememberPeer(online_id, *out_addr, *out_port);
+    }
+    return resolved;
 }
 
 bool HasSignalingMagic(const u8* buf, size_t nbytes) {
@@ -101,6 +107,9 @@ void HandleStunEcho(const NpSignaling::StunEcho& echo) {
 
     auto* netinfo = Common::Singleton<NetUtil::NetUtilInternal>::Instance();
     netinfo->SetExternalIp(echo.ext_ip);
+    if (Core::Net::BbscRelay::Enabled()) {
+        Core::Net::BbscRelay::SetSelfEndpoint(echo.ext_ip, echo.ext_port);
+    }
 }
 
 void ProcessSignalingPacket(const void* data, u32 len, u32 from_addr, u16 from_port) {
@@ -214,6 +223,9 @@ bool PublishSignalingInfo(const OrbisNpOnlineId& online_id) {
     NpSignaling::StunPing ping{};
     std::memcpy(ping.online_id, online_id.data, ORBIS_NP_ONLINEID_MAX_LENGTH);
     ping.local_ip = NpSignaling::Transport::LocalAddr();
+    if (Core::Net::BbscRelay::Enabled()) {
+        Core::Net::BbscRelay::SetLocalId(OnlineIdString(online_id)); // bbport: BBSC relay
+    }
 
     const int rc =
         NpSignaling::Transport::SignalingSendTo(&ping, sizeof(ping), server_addr, server_udp);

@@ -18,6 +18,7 @@
 #include "core/libraries/net/net_log.h"
 #include "core/libraries/net/net_p2p.h"
 #include "core/libraries/net/net_translate.h"
+#include "core/net/bbsc_relay.h"
 #include "core/net/guest_net.h"
 #include "core/net/p2p_codec.h"
 
@@ -298,6 +299,12 @@ u32 GetP2PAdvertisedAddr() {
 }
 
 void SetP2PRelayServer(u32 addr, u16 port) {
+    // bbport: with the BBSC mod the relay is BBSC's (UDP 3478 on the same address), not SuperMedo's.
+    if (Core::Net::BbscRelay::Enabled()) {
+        Core::Net::BbscRelay::SetServer(addr);
+        addr = 0;
+        port = 0;
+    }
     auto& state = P2PStateInstance();
     std::scoped_lock lock{state.mutex};
     state.relay_addr = addr;
