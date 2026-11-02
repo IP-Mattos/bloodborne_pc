@@ -1,0 +1,69 @@
+name: build-probe
+
+on:
+  push:
+    branches: [bbsc-coop-1.9.7]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            git patch
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-python
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-ffmpeg
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-spirv-tools
+            mingw-w64-clang-x86_64-spirv-headers
+            mingw-w64-clang-x86_64-spirv-cross
+            mingw-w64-clang-x86_64-protobuf
+            mingw-w64-clang-x86_64-openssl
+            mingw-w64-clang-x86_64-zlib
+            mingw-w64-clang-x86_64-miniupnpc
+            mingw-w64-clang-x86_64-nlohmann-json
+
+      - name: Build bb-probe
+        run: |
+          export MSYS2_ROOT=$(cygpath -u "$RUNNER_TEMP/../../_temp/msys64" 2>/dev/null || echo /c/msys64)
+          bash build.sh
+
+      - name: List DLL dependencies
+        run: |
+          ldd out/bb-probe.exe | grep -i clang64 | sed 's/ (0x.*//' > out/bb-probe-dlls.txt || true
+          cat out/bb-probe-dlls.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bb-probe
+          path: |
+            out/bb-probe.exe
+            out/bb-probe-dlls.txt
+          if-no-files-found: error
+      - name: Build log on failure
+        if: failure()
+        run: tail -200 out/gpu-build.log || true
