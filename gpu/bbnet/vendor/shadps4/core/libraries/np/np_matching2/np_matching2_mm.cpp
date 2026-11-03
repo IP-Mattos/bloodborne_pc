@@ -16,6 +16,7 @@
 #include <fmt/format.h>
 
 #include "common/logging/log.h"
+#include "core/net/bbsc_relay.h"
 #include "core/libraries/net/net.h"
 #include "core/libraries/net/net_p2p.h"
 #include "core/libraries/net/net_upnp.h"
@@ -1523,6 +1524,11 @@ bool RequestSignalingInfos(std::string_view target_online_id, u32* out_addr, u16
     }
     *out_addr = addr_nbo;
     *out_port = Libraries::Net::sceNetHtons(port_host);
+    if (Core::Net::BbscRelay::Enabled()) {
+        // bbport: a lookup is how the summoning host learns its guest; the BBSC relay addresses
+        // peers by online id and carries nothing for one it was never told about.
+        Core::Net::BbscRelay::RememberPeer(target_online_id, addr_nbo, *out_port);
+    }
     LOG_WARNING(Lib_NpMatching2, "BBSC-diag: peer '{}' is at {}:{}", target_online_id, addr_str,
                 port_host);
     LOG_INFO(Lib_NpMatching2, "received peer='{}' ip={} port={} addr_nbo={:#x} port_nbo={:#x}",
