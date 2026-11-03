@@ -311,12 +311,9 @@ Error Transport::SendPacket(std::span<const u8> packet, const Endpoint& to) {
         }
     }
     if (to.Family() == AF_INET && BbscRelay::Active()) {
-        // bbport: BBSC's relay (instead of the SuperMedo one): a copy through the server for
-        // every known peer, and the direct packet too until the peer answers directly.
         const auto* in = reinterpret_cast<const sockaddr_in*>(to.Sockaddr());
-        // bbport: BBSC's shadp2p server (UDP matching port: STUN pings, peer lookups) takes the
-        // 4-byte vport header [FFFF][FFFF] and drops this codec's 6-byte one ([FF][83][FFFF][FFFF],
-        // shadPS4's own server framing). BBSC's 1.7.2 build sent both; so does this one.
+        // bbport: BBSC's shadp2p server (UDP matching port) drops this codec's 6-byte vport header
+        // ([FF][83][FFFF][FFFF]) and takes the 4-byte [FFFF][FFFF]. Send both.
         if (in->sin_addr.s_addr == BbscRelay::ServerAddr() &&
             in->sin_port != BbscRelay::ServerPort() && packet.size() > 6 && packet[0] == 0xFF &&
             packet[2] == 0xFF && packet[3] == 0xFF && packet[4] == 0xFF && packet[5] == 0xFF) {
@@ -420,7 +417,7 @@ void Transport::HandlePacket(std::span<const u8> packet, const Endpoint& from,
         } else if (in->sin_addr.s_addr == BbscRelay::ServerAddr() && packet.size() > 4 &&
                    packet[0] == 0xFF && packet[1] == 0xFF && packet[2] == 0xFF &&
                    packet[3] == 0xFF) {
-            // bbport: the BBSC server's reply (STUN echo, peer infos) in its 4-byte framing.
+            // bbport: BBSC server reply (STUN echo, peer infos), 4-byte vport framing.
             static std::atomic<int> logged{0};
             if (logged.fetch_add(1) < 3) {
                 LOG_WARNING(Lib_Net, "BBSC server: {} byte signaling reply (4-byte vport header)",

@@ -215,8 +215,7 @@ s32 PS4_SYSV_ABI sceNpLookupNpId(OrbisNpLookupRequestId reqId, const OrbisNpOnli
                 SetNpId(*npId, canonicalOnlineId);
             } else if (npId != nullptr && Core::Net::BbscRelay::Enabled()) {
                 // bbport: BBSC's game server has no online id lookup. On shadNet an NpId is the
-                // online id in its handle, so a joiner can still activate the other players in
-                // the room (BBSC's sceNpLookupNpId, bbport-1.7.2-bbsc.patch).
+                // online id in its handle, so a joiner can still activate room members.
                 SetNpId(*npId, targetOnlineId);
                 result = ORBIS_OK;
             }

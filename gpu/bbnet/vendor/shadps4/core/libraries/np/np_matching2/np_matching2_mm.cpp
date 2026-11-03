@@ -1017,7 +1017,6 @@ s32 MmSubmitRequest(OrbisNpMatching2ContextId ctx_id, OrbisNpMatching2RequestId 
     }
 
     {
-        // bbport diagnostics (BBSC): every request sent to the shadNet server, bounded.
         static std::atomic<int> logged{0};
         if (logged.fetch_add(1) < 400) {
             LOG_WARNING(Lib_NpMatching2, "BBSC-diag: request ctx={} reqId={} event={:#x} cmd={}",
@@ -1525,8 +1524,7 @@ bool RequestSignalingInfos(std::string_view target_online_id, u32* out_addr, u16
     *out_addr = addr_nbo;
     *out_port = Libraries::Net::sceNetHtons(port_host);
     if (Core::Net::BbscRelay::Enabled()) {
-        // bbport: a lookup is how the summoning host learns its guest; the BBSC relay addresses
-        // peers by online id and carries nothing for one it was never told about.
+        // bbport: how the summoning host learns its guest. The BBSC relay routes by online id.
         Core::Net::BbscRelay::RememberPeer(target_online_id, addr_nbo, *out_port);
     }
     LOG_WARNING(Lib_NpMatching2, "BBSC-diag: peer '{}' is at {}:{}", target_online_id, addr_str,

@@ -299,7 +299,7 @@ u32 GetP2PAdvertisedAddr() {
 }
 
 void SetP2PRelayServer(u32 addr, u16 port) {
-    // bbport: with the BBSC mod the relay is BBSC's (UDP 3478 on the same address), not SuperMedo's.
+    // bbport: BBSC's relay (UDP 3478 on the same address) replaces SuperMedo's.
     if (Core::Net::BbscRelay::Enabled()) {
         Core::Net::BbscRelay::SetServer(addr);
         addr = 0;

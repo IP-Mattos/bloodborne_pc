@@ -222,7 +222,7 @@ private:
 
     void ThreadMain();
     void HandlePacket(std::span<const u8> packet, const Endpoint& from, Clock::time_point now);
-    void SendBbscRelayKeepAlive(); // bbport: BBSC relay registrations
+    void SendBbscRelayKeepAlive();
     void HandleStreamSegment(std::span<const u8> bytes, const Endpoint& from,
                              Clock::time_point now);
     void HandleDatagram(Codec::Decoded& decoded, const Endpoint& from);

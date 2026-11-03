@@ -231,7 +231,7 @@ bool PublishSignalingInfo(const OrbisNpOnlineId& online_id) {
     std::memcpy(ping.online_id, online_id.data, ORBIS_NP_ONLINEID_MAX_LENGTH);
     ping.local_ip = NpSignaling::Transport::LocalAddr();
     if (Core::Net::BbscRelay::Enabled()) {
-        Core::Net::BbscRelay::SetLocalId(OnlineIdString(online_id)); // bbport: BBSC relay
+        Core::Net::BbscRelay::SetLocalId(OnlineIdString(online_id));
     }
 
     const int rc =
