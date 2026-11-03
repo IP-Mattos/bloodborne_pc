@@ -77,7 +77,7 @@ void AddAlias(const std::string& id, u32 addr, u16 port, const char* from) {
         return;
     }
     g_alias[Key(addr, port)] = id;
-    LOG_INFO(Lib_Net, "BBSC relay: '{}' known at {:#x}:{} (from {})", IdText(id), addr,
+    LOG_WARNING(Lib_Net, "BBSC relay: '{}' known at {:#x}:{} (from {})", IdText(id), addr,
              ntohs(port), from);
 }
 
@@ -131,9 +131,9 @@ void SetServer(u32 addr_nbo) {
     g_acked = false;
     g_last_register = {};
     if (addr_nbo != 0) {
-        LOG_INFO(Lib_Net, "BBSC relay: server {:#x}:{}", addr_nbo, port);
+        LOG_WARNING(Lib_Net, "BBSC relay: server {:#x}:{}", addr_nbo, port);
     } else {
-        LOG_INFO(Lib_Net, "BBSC relay: off");
+        LOG_WARNING(Lib_Net, "BBSC relay: off");
     }
 }
 
@@ -152,7 +152,7 @@ void SetLocalId(std::string_view online_id) {
 void SetSelfEndpoint(u32 addr_nbo, u16 port_nbo) {
     std::lock_guard lock(g_mutex);
     if (g_self_addr != addr_nbo || g_self_port != port_nbo) {
-        LOG_INFO(Lib_Net, "BBSC relay: our public endpoint {:#x}:{}", addr_nbo, ntohs(port_nbo));
+        LOG_WARNING(Lib_Net, "BBSC relay: our public endpoint {:#x}:{}", addr_nbo, ntohs(port_nbo));
     }
     g_self_addr = addr_nbo;
     g_self_port = port_nbo;
@@ -203,7 +203,7 @@ Outgoing Route(u32 dest_addr_nbo, u16 dest_port_nbo, const u8* packet, size_t si
     }
     if (peer->relayed_since.time_since_epoch().count() == 0) {
         peer->relayed_since = now;
-        LOG_INFO(Lib_Net, "BBSC relay: '{}' at {:#x}:{} - through the relay", IdText(peer->id),
+        LOG_WARNING(Lib_Net, "BBSC relay: '{}' at {:#x}:{} - through the relay", IdText(peer->id),
                  peer->addr, ntohs(peer->port));
     }
     const std::string& self = g_local_ids.front();
@@ -232,7 +232,7 @@ bool Receive(const u8* data, size_t size, bool* deliver, u32* from_addr, u16* fr
     if (data[4] == 0x02) {
         if (!g_acked) {
             g_acked = true;
-            LOG_INFO(Lib_Net, "BBSC relay: registered with the relay");
+            LOG_WARNING(Lib_Net, "BBSC relay: registered with the relay");
         }
         return true;
     }
@@ -280,7 +280,7 @@ bool Receive(const u8* data, size_t size, bool* deliver, u32* from_addr, u16* fr
     peer.missing_until = {};
     if (peer.relayed_since.time_since_epoch().count() == 0) {
         peer.relayed_since = Clock::now();
-        LOG_INFO(Lib_Net, "BBSC relay: '{}' reached us through the relay - answering the same way",
+        LOG_WARNING(Lib_Net, "BBSC relay: '{}' reached us through the relay - answering the same way",
                  IdText(peer.id));
     }
     *deliver = true;
@@ -298,7 +298,7 @@ void NoteDirectReceive(u32 addr_nbo, u16 port_nbo) {
     Peer* const peer = FindPeer(addr_nbo, port_nbo);
     if (peer != nullptr && !peer->direct_rx) {
         peer->direct_rx = true;
-        LOG_INFO(Lib_Net, "BBSC relay: '{}' reached us directly", IdText(peer->id));
+        LOG_WARNING(Lib_Net, "BBSC relay: '{}' reached us directly", IdText(peer->id));
     }
 }
 
