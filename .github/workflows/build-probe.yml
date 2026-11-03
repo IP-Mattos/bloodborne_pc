@@ -51,17 +51,19 @@ jobs:
         run: |
           bash build.sh
 
-      - name: List DLL dependencies
+      - name: Package bb-probe as a release does
         run: |
-          ldd out/bb-probe.exe | grep -i clang64 | sed 's/ (0x.*//' > out/bb-probe-dlls.txt || true
-          cat out/bb-probe-dlls.txt
+          mkdir -p out/probe-bin
+          llvm-strip --strip-debug -o out/probe-bin/bb-probe.exe out/bb-probe.exe
+          ldd out/probe-bin/bb-probe.exe |
+            awk '/\/clang64\/bin\// && !/vulkan-1\.dll/ {print $3}' | sort -u |
+            while read -r dll; do cp -u "$dll" out/probe-bin/; done
+          ls out/probe-bin | wc -l
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bb-probe
-          path: |
-            out/bb-probe.exe
-            out/bb-probe-dlls.txt
+          name: bb-probe-bin
+          path: out/probe-bin/
           if-no-files-found: error
       - name: Build log on failure
         if: failure()
