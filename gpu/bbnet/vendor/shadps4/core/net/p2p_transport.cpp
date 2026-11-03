@@ -418,7 +418,7 @@ void Transport::HandlePacket(std::span<const u8> packet, const Endpoint& from,
                 return;
             }
         } else if (in->sin_addr.s_addr == BbscRelay::ServerAddr() && packet.size() > 4 &&
-                   std::memcmp(packet.data(), "Ã¿Ã¿Ã¿Ã¿", 4) == 0) {
+                   std::memcmp(packet.data(), "ÿÿÿÿ", 4) == 0) {
             // bbport: the BBSC server's reply (STUN echo, peer infos) in its 4-byte framing.
             static std::atomic<int> logged{0};
             if (logged.fetch_add(1) < 3) {
