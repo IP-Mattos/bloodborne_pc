@@ -77,6 +77,13 @@ bool ResolvePeerEndpoint(const NpMatching2::MemberCache& member, u32* out_addr, 
     const bool resolved = !online_id.empty() &&
                           NpSignaling::Transport::ResolvePeer(online_id, out_addr, out_port) &&
                           *out_addr != 0 && *out_port != 0;
+    if (!resolved && Core::Net::BbscRelay::Enabled()) {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 10) {
+            LOG_WARNING(Lib_NpSignaling, "BBSC: no endpoint for peer '{}' (server lookup empty)",
+                        online_id);
+        }
+    }
     if (resolved && Core::Net::BbscRelay::Enabled()) {
         // bbport: the BBSC relay addresses peers by online id.
         Core::Net::BbscRelay::RememberPeer(online_id, *out_addr, *out_port);

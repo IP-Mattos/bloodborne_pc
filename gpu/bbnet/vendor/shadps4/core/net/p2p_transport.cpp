@@ -5,6 +5,7 @@
 #include <cstring>
 #include <tuple>
 
+#include "common/logging/log.h"
 #include "core/net/bbsc_relay.h"
 #include "core/net/p2p_transport.h"
 
@@ -313,6 +314,21 @@ Error Transport::SendPacket(std::span<const u8> packet, const Endpoint& to) {
         // bbport: BBSC's relay (instead of the SuperMedo one): a copy through the server for
         // every known peer, and the direct packet too until the peer answers directly.
         const auto* in = reinterpret_cast<const sockaddr_in*>(to.Sockaddr());
+        // bbport: BBSC's shadp2p server (UDP matching port: STUN pings, peer lookups) takes the
+        // 4-byte vport header [FFFF][FFFF] and drops this codec's 6-byte one ([FF][83][FFFF][FFFF],
+        // shadPS4's own server framing). BBSC's 1.7.2 build sent both; so does this one.
+        if (in->sin_addr.s_addr == BbscRelay::ServerAddr() &&
+            in->sin_port != BbscRelay::ServerPort() && packet.size() > 6 && packet[0] == 0xFF &&
+            packet[2] == 0xFF && packet[3] == 0xFF && packet[4] == 0xFF && packet[5] == 0xFF) {
+            static std::atomic<int> logged{0};
+            if (logged.fetch_add(1) < 3) {
+                LOG_WARNING(Lib_Net, "BBSC server: signaling packet also sent with the 4-byte "
+                                     "vport header ({} bytes)",
+                            packet.size() - 2);
+            }
+            Host::SendTo(socket_, packet.data() + 2, packet.size() - 2, 0, to.Sockaddr(),
+                         to.Length());
+        }
         const auto route =
             BbscRelay::Route(in->sin_addr.s_addr, in->sin_port, packet.data(), packet.size());
         if (!route.relay_frame.empty()) {
@@ -401,6 +417,22 @@ void Transport::HandlePacket(std::span<const u8> packet, const Endpoint& from,
                 }
                 return;
             }
+        } else if (in->sin_addr.s_addr == BbscRelay::ServerAddr() && packet.size() > 4 &&
+                   std::memcmp(packet.data(), "ÿÿÿÿ", 4) == 0) {
+            // bbport: the BBSC server's reply (STUN echo, peer infos) in its 4-byte framing.
+            static std::atomic<int> logged{0};
+            if (logged.fetch_add(1) < 3) {
+                LOG_WARNING(Lib_Net, "BBSC server: {} byte signaling reply (4-byte vport header)",
+                            packet.size() - 4);
+            }
+            std::vector<u8> payload(packet.begin() + 4, packet.end());
+            const size_t channel =
+                config_.classify_signaling ? config_.classify_signaling(payload) : 0;
+            if (channel < signaling_.size() &&
+                signaling_[channel].size() < config_.signaling_queue_packets) {
+                signaling_[channel].emplace_back(std::move(payload), from);
+            }
+            return;
         } else {
             BbscRelay::NoteDirectReceive(in->sin_addr.s_addr, in->sin_port);
         }
