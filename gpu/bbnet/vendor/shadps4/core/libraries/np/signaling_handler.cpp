@@ -1644,6 +1644,13 @@ void TerminateSig1(NpSignaling::OrbisNpSignalingConnectionId conn_id) {
 }
 
 void StartMatching2(NpMatching2::ContextObject& ctx) {
+    {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 100) {
+            LOG_WARNING(Lib_NpSignaling, "BBSC-diag: StartMatching2 ctx={} signaling callback {}",
+                        ctx.ctx_id, ctx.signaling_callback ? "set" : "NOT set");
+        }
+    }
     if (!ctx.signaling_callback) {
         return;
     }
@@ -1658,14 +1665,28 @@ void StartMatching2(NpMatching2::ContextObject& ctx) {
     };
 
     std::vector<PeerTarget> targets;
+    size_t cached_rooms = 0;
+    size_t cached_members = 0;
     {
         auto cache = NpHandler::GetInstance().LockMatching2Cache(ctx.ctx_id);
+        cached_rooms = cache->rooms.size();
         for (const auto& [room_id, room] : cache->rooms) {
+            cached_members += room.members.size();
             for (const auto& [member_id, member] : room.members) {
                 if (ShouldConnectToPeer(room, ctx.my_member_id, member_id)) {
                     targets.push_back({member_id, member});
                 }
             }
+        }
+    }
+    {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 100) {
+            LOG_WARNING(Lib_NpSignaling,
+                        "BBSC-diag: StartMatching2 ctx={} my member {}: {} room(s), {} member(s) "
+                        "cached, {} to connect to",
+                        ctx.ctx_id, ctx.my_member_id, cached_rooms, cached_members,
+                        targets.size());
         }
     }
 

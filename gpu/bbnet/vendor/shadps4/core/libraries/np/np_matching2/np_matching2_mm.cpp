@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <atomic>
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -473,6 +474,15 @@ void BuildMemberDataInternalUpdate(CallbackPayload& p, const RoomCache& rc, cons
 }
 
 void HandleRoomEvent(const ShadNet::NotifyRoomEvent& n) {
+    {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 400) {
+            LOG_WARNING(Lib_NpMatching2,
+                        "BBSC-diag: room event {:#x} ctx={} room={} member={} cause={}",
+                        static_cast<u32>(n.event), n.ctx_id, n.room_id, n.member_id,
+                        static_cast<u32>(n.event_cause));
+        }
+    }
     auto ctx = NpHandler::GetInstance().GetMatching2ContextManager().Get(
         static_cast<OrbisNpMatching2ContextId>(n.ctx_id));
     if (!ctx) {
@@ -819,6 +829,15 @@ void OnMatchingReply(ShadNet::CommandType cmd, u64 pkt_id, ShadNet::ErrorType er
         pr = it->second;
         g_mm.pending.erase(it);
     }
+    {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 400) {
+            LOG_WARNING(Lib_NpMatching2,
+                        "BBSC-diag: reply cmd={} error={} body={} bytes -> ctx={} reqId={} event={:#x}",
+                        static_cast<u16>(cmd), static_cast<int>(error), body.size(), pr.ctx_id,
+                        pr.req_id, static_cast<u16>(pr.req_event));
+        }
+    }
     LOG_DEBUG(Lib_NpMatching2, "reply pkt_id={} cmd={} -> ctx={} reqId={} event={:#x}", pkt_id,
               static_cast<u16>(cmd), pr.ctx_id, pr.req_id, static_cast<u16>(pr.req_event));
     DispatchRequestComplete(pr, error, body);
@@ -996,6 +1015,14 @@ s32 MmSubmitRequest(OrbisNpMatching2ContextId ctx_id, OrbisNpMatching2RequestId 
         return ORBIS_OK;
     }
 
+    {
+        // bbport diagnostics (BBSC): every request sent to the shadNet server, bounded.
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 400) {
+            LOG_WARNING(Lib_NpMatching2, "BBSC-diag: request ctx={} reqId={} event={:#x} cmd={}",
+                        ctx_id, req_id, static_cast<u16>(req_event), static_cast<u16>(cmd));
+        }
+    }
     LOG_INFO(Lib_NpMatching2,
              "ctx={} reqId={} event={:#x} cmd={} aVariant={} callback={:#x} "
              "arg={}",
@@ -1458,6 +1485,7 @@ bool RequestSignalingInfos(std::string_view target_online_id, u32* out_addr, u16
 
     shadnet::RequestSignalingInfosRequest req;
     req.set_target_npid(std::string(target_online_id));
+    LOG_WARNING(Lib_NpMatching2, "BBSC-diag: asking the server where '{}' is", target_online_id);
     const u64 pkt_id =
         client->SubmitRequest(ShadNet::CommandType::RequestSignalingInfos, MakeProtoPayload(req));
 
@@ -1473,6 +1501,8 @@ bool RequestSignalingInfos(std::string_view target_online_id, u32* out_addr, u16
         g_mm.sig_replies.erase(pkt_id);
     }
     if (reply.first != ShadNet::ErrorType::NoError) {
+        LOG_WARNING(Lib_NpMatching2, "BBSC-diag: signaling infos for '{}' failed, error={}",
+                    target_online_id, static_cast<int>(reply.first));
         return false;
     }
 
@@ -1493,6 +1523,8 @@ bool RequestSignalingInfos(std::string_view target_online_id, u32* out_addr, u16
     }
     *out_addr = addr_nbo;
     *out_port = Libraries::Net::sceNetHtons(port_host);
+    LOG_WARNING(Lib_NpMatching2, "BBSC-diag: peer '{}' is at {}:{}", target_online_id, addr_str,
+                port_host);
     LOG_INFO(Lib_NpMatching2, "received peer='{}' ip={} port={} addr_nbo={:#x} port_nbo={:#x}",
              target_online_id, addr_str, port_host, addr_nbo, *out_port);
     return true;
